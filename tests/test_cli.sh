@@ -76,6 +76,29 @@ elif [[ "$script" == *"transcribe_audio.py" ]]; then
     mkdir -p "$outdir"
     : > "$outdir/$base.$fmt"
   fi
+elif [[ "$script" == *"dub_translate_audio.py" ]]; then
+  in_path=""
+  outdir=""
+  target_lang="es"
+  out_path=""
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --in) in_path="$2"; shift 2;;
+      --outdir) outdir="$2"; shift 2;;
+      --target-lang) target_lang="$2"; shift 2;;
+      --out) out_path="$2"; shift 2;;
+      *) shift;;
+    esac
+  done
+  if [[ -n "$out_path" ]]; then
+    mkdir -p "$(dirname "$out_path")"
+    : > "$out_path"
+  elif [[ -n "$in_path" && -n "$outdir" ]]; then
+    base="$(basename "$in_path")"
+    base="${base%.*}"
+    mkdir -p "$outdir"
+    : > "$outdir/${base}_dub_${target_lang}.mp3"
+  fi
 fi
 EOF
 
@@ -136,6 +159,14 @@ expect_success mkv_defaults_optional_args \
   "$ROOT_DIR/bin/process_mkv.sh" --in "$INPUT" --shots --slides --audio --transcribe --outdir "$TMP_ROOT/out-mkv-defaults"
 grep -F -- "--format txt --lang auto" "$TEST_PYTHON3_LOG" >/dev/null || fail "mkv transcribe defaults were not applied"
 
+expect_success mkv_dub_default_lang \
+  "$ROOT_DIR/bin/process_mkv.sh" --in "$INPUT" --dub --outdir "$TMP_ROOT/out-mkv-dub-default"
+grep -F -- "dub_translate_audio.py --in $TMP_ROOT/out-mkv-dub-default/input.mp3 --target-lang es --outdir $TMP_ROOT/out-mkv-dub-default" "$TEST_PYTHON3_LOG" >/dev/null || fail "mkv dub default language not applied"
+[[ -f "$TMP_ROOT/out-mkv-dub-default/input_dub_es.mp3" ]] || fail "mkv dub output missing"
+
+expect_failure mkv_dub_invalid_lang \
+  "$ROOT_DIR/bin/process_mkv.sh" --in "$INPUT" --dub spanish --outdir "$TMP_ROOT/out-mkv-dub-invalid"
+
 expect_success yt_clip_single_arg \
   "$ROOT_DIR/bin/process_youtube.sh" --url "https://youtube.com/watch?v=test" --clip 00:00:01 --outdir "$TMP_ROOT/out-yt-clip"
 [[ -f "$TMP_ROOT/out-yt-clip/testid_speed2.0.mp4" ]] || fail "youtube clip output missing"
@@ -146,5 +177,10 @@ grep -F -- "--in $TMP_ROOT/out-yt-fps-slides/shots_fps" "$TEST_PYTHON3_LOG" >/de
 
 expect_failure yt_transcribe_without_audio \
   "$ROOT_DIR/bin/process_youtube.sh" --url "https://youtube.com/watch?v=test" --transcribe --outdir "$TMP_ROOT/out-yt-transcribe-fail"
+
+expect_success yt_dub_default_lang \
+  "$ROOT_DIR/bin/process_youtube.sh" --url "https://youtube.com/watch?v=test" --dub --outdir "$TMP_ROOT/out-yt-dub-default"
+grep -F -- "dub_translate_audio.py --in $TMP_ROOT/out-yt-dub-default/testid.mp3 --target-lang es --outdir $TMP_ROOT/out-yt-dub-default" "$TEST_PYTHON3_LOG" >/dev/null || fail "youtube dub default language not applied"
+[[ -f "$TMP_ROOT/out-yt-dub-default/testid_dub_es.mp3" ]] || fail "youtube dub output missing"
 
 echo "All CLI tests passed."

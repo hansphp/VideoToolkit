@@ -1,6 +1,6 @@
 # VideoToolkit — Guía de uso
 
-**VideoToolkit** es una colección de scripts en bash y Python diseñada para facilitar el procesamiento de videos grabados con OBS (`.mkv`) o provenientes de **YouTube**.  A partir de un archivo de entrada puedes extraer audio en alta calidad, generar capturas periódicas, filtrar esas capturas para quedarte solo con las diapositivas relevantes, crear clips acelerados y hasta transcribir el audio a texto en varios formatos.  Todo ello se apoya en herramientas consolidadas como **ffmpeg/ffprobe**, **yt‑dlp** y **faster‑whisper**.
+**VideoToolkit** es una colección de scripts en bash y Python diseñada para facilitar el procesamiento de videos grabados con OBS (`.mkv`) o provenientes de **YouTube**.  A partir de un archivo de entrada puedes extraer audio en alta calidad, generar capturas periódicas, filtrar esas capturas para quedarte solo con las diapositivas relevantes, crear clips acelerados, transcribir el audio a texto y generar un MP3 doblado/traducido automáticamente.  Todo ello se apoya en herramientas consolidadas como **ffmpeg/ffprobe**, **yt‑dlp** y **faster‑whisper**.
 
 Este documento está pensado para orientarte paso a paso, comenzando por la creación del entorno de trabajo y culminando con un ejemplo práctico usando un video real de YouTube.
 
@@ -63,6 +63,7 @@ Tras la ejecución se creará una carpeta de salida dentro de `out/youtube/` con
 - `slides/slide-0001.jpg` – diapositivas filtradas según el método y umbral elegidos.
 - `*.speed2.0.mp4` – clip acelerado (si `--all` está activado).
 - `*.txt` – transcripción en texto plano.  Otros formatos disponibles son `srt`, `vtt` y `json`.
+- `*_dub_es.mp3` – audio doblado/traducido (si usas `--dub es`).
 
 Puedes ajustar el método de filtrado de diapositivas (`phash`, `ssim` o `hist`) y el umbral para adaptarte mejor al contenido de tus videos.  Consulta la sección “Selección de diapositivas clave” más abajo para orientarte.
 
@@ -86,14 +87,16 @@ Una vez completado el proceso, navega al directorio de salida (`out/youtube/yYVQ
 - **Selección de diapositivas clave:** usa métodos como `phash`, `ssim` o `hist` para filtrar las capturas y quedarte solo con las diapositivas relevantes (`--slides método umbral`).
 - **Clips acelerados:** genera un video acelerado a 2x, 4x, etc., de todo el archivo o de un segmento (`--clip inicio fin velocidad`).
 - **Transcripción de audio:** convierte el audio a texto en formatos `txt`, `srt`, `vtt` o `json` y soporta varios idiomas (`--transcribe formato idioma`).
+- **Doblaje/traducción a MP3:** crea un MP3 en otro idioma (por defecto español) mediante transcripción + traducción + TTS (`--dub [lang]`).
 
 Todas estas funciones pueden combinarse libremente en los scripts `process_mkv.sh` (para archivos locales `.mkv`) y `process_youtube.sh` (para URLs de YouTube).
 
 ## Requisitos y dependencias
 
 1. **ffmpeg** y **ffprobe** en el `PATH`.  Puedes instalarlos mediante el paquete `ffmpeg` en Linux, Homebrew (`brew install ffmpeg`) en macOS o descargando los builds de Windows y agregando la carpeta `bin` a tu `PATH`.  Alternativamente utiliza **WSL** o Git Bash en Windows.
-2. **Python 3.10 o superior** con las librerías listadas en `requirements.txt`.  Incluye `yt‑dlp` para descargar videos de YouTube y `faster‑whisper` para transcribir audio.
+2. **Python 3.10 o superior** con las librerías listadas en `requirements.txt`.  Incluye `yt‑dlp` para descargar videos de YouTube, `faster‑whisper` para transcribir, y librerías de traducción/TTS para doblaje.
 3. **bash** (disponible por defecto en Linux/macOS y en WSL para Windows).  Para usar únicamente ffmpeg y prescindir de los scripts puedes consultar las líneas de ejemplo en la sección de Windows más abajo.
+4. **Conexión a internet** para `--dub` (traducción automática y síntesis de voz).
 
 ## Estructura del proyecto
 
@@ -107,7 +110,8 @@ VideoToolkit/
 │  └─ transcribe.sh          # Transcribe audios existentes
 ├─ python/
 │  ├─ transcribe_audio.py    # Utilidad Python para transcribir sin bash
-│  └─ select_slides.py       # Lógica de filtrado con OpenCV
+│  ├─ select_slides.py       # Lógica de filtrado con OpenCV
+│  └─ dub_translate_audio.py # Traducción + doblaje TTS a MP3
 ├─ lib/
 │  └─ common.sh              # Funciones reutilizables (audio, capturas, clips)
 ├─ tests/
@@ -153,6 +157,9 @@ bin/process_mkv.sh --in clase.mkv --shots 5 --slides phash 12
 
 # Transcripción integrada
 bin/process_mkv.sh --in clase.mkv --audio --transcribe srt es
+
+# Doblaje/traducción automática a español
+bin/process_mkv.sh --in clase.mkv --dub es
 ```
 
 ### Procesar una URL de YouTube
@@ -168,6 +175,9 @@ bin/process_youtube.sh --url "https://www.youtube.com/watch?v=abc" --audio --tra
 
 # Capturas filtradas con SSIM y umbral 0.20
 bin/process_youtube.sh --url "https://www.youtube.com/watch?v=abc" --shots 5 --slides ssim 0.20
+
+# Doblaje/traducción automática a español
+bin/process_youtube.sh --url "https://www.youtube.com/watch?v=abc" --dub es
 ```
 
 ### Selección de diapositivas clave
@@ -229,10 +239,82 @@ Los formatos disponibles son:
 
 Para audios largos en CPU se recomienda usar modelos `tiny` o `base` para mayor velocidad (`FWHISPER_MODEL=tiny`).  Con GPU CUDA puedes aprovechar modelos mayores (`small`, `medium`, `large‑v3`) y definir el dispositivo con `FWHISPER_DEVICE=cuda`.
 
+## Doblaje automático a MP3 traducido
+
+La opción `--dub [lang]` genera un archivo `*_dub_<lang>.mp3` a partir del audio extraído:
+
+1. Transcribe con `faster-whisper`.
+2. Traduce cada segmento al idioma objetivo.
+3. Genera voz TTS por segmento.
+4. Mezcla los segmentos usando los timestamps de la transcripción.
+
+Ejemplos:
+
+```bash
+# Desde MKV local
+bin/process_mkv.sh --in clase.mkv --dub es
+
+# Desde YouTube (doblaje al español)
+bin/process_youtube.sh --url "https://www.youtube.com/watch?v=abc" --dub es
+```
+
+Notas:
+
+- Si no usas `--audio`, `--dub` extrae un MP3 base automáticamente.
+- `--dub` requiere internet para la traducción/TTS.
+- El doblaje queda alineado por tiempos, pero en segmentos muy largos puede haber solapamientos naturales de voz.
+
+## Casos de uso
+
+### Caso 1: YouTube → slides + transcripción (ejemplo completo)
+
+```bash
+bin/process_youtube.sh \
+  --url "https://www.youtube.com/watch?v=yYVQp-IrUeQ" \
+  --shots 1 \
+  --slides ssim 0.20 \
+  --audio \
+  --transcribe txt en
+```
+
+### Caso 2: Obtener un video final en español (`.mp4`)
+
+```bash
+# 1) Generar doblaje al español
+bin/process_youtube.sh \
+  --url "https://www.youtube.com/watch?v=yYVQp-IrUeQ" \
+  --dub es
+
+# 2) Combinar video original + doblaje en español
+ffmpeg -y \
+  -i out/youtube/yYVQp-IrUeQ/yYVQp-IrUeQ.mp4 \
+  -i out/youtube/yYVQp-IrUeQ/yYVQp-IrUeQ_dub_es.mp3 \
+  -map 0:v:0 -map 1:a:0 \
+  -c:v copy -c:a aac -shortest \
+  out/youtube/yYVQp-IrUeQ/yYVQp-IrUeQ_es.mp4
+```
+
+En el segundo paso, `-shortest` asegura que el `.mp4` termine cuando finalice el stream más corto.
+
+Comando continuo (todo en una sola ejecución):
+
+```bash
+bin/process_youtube.sh \
+  --url "https://www.youtube.com/watch?v=yYVQp-IrUeQ" \
+  --dub es && \
+ffmpeg -y \
+  -i out/youtube/yYVQp-IrUeQ/yYVQp-IrUeQ.mp4 \
+  -i out/youtube/yYVQp-IrUeQ/yYVQp-IrUeQ_dub_es.mp3 \
+  -map 0:v:0 -map 1:a:0 \
+  -c:v copy -c:a aac -shortest \
+  out/youtube/yYVQp-IrUeQ/yYVQp-IrUeQ_es.mp4
+```
+
 ## Notas y consejos
 
 - Si obtienes un error del tipo “command not found: ffmpeg/ffprobe”, instala ffmpeg y asegúrate de que su ruta `bin` esté en la variable `PATH`.
 - Si ves `OCR unavailable or failed (...)` durante `--slides`, instala `tesseract` para habilitar el filtro por texto (o usa `--min-words 0` para desactivarlo).
+- Si `--dub` falla por red o proveedor, vuelve a intentar con una conexión estable y revisa dependencias del `requirements.txt`.
 - Para velocidades de clip altas (>2x), la cadena de filtros de audio `atempo` puede distorsionar el sonido; prueba valores entre 2x y 4x para obtener resultados aceptables.
 - Si `yt-dlp` devuelve `HTTP Error 403: Forbidden`, actualiza a Python 3.10+ y reinstala dependencias.  También puedes exportar `YTDLP_COOKIES_FROM_BROWSER` (por ejemplo `chrome` o `safari`) para pasar cookies al script de YouTube.
 - En Windows puro (sin WSL), puedes replicar las funciones básicas con ffmpeg en PowerShell.  Consulta la sección de Notas técnicas en el README original para ejemplos.

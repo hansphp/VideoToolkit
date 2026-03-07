@@ -16,6 +16,7 @@ Descarga el video con yt-dlp (mejor MP4 posible) y aplica los mismos pasos que p
 Opciones (idénticas):
   --slides [method] [threshold]  Seleccionar 'diapositivas' únicas desde shots (method: phash|ssim|hist; threshold depende del método)
   --audio                      Extraer MP3
+  --dub [lang]                Traducir/doblar el audio a otro idioma (default: es) y generar MP3
   --shots [N]                  Capturas cada N segundos (defecto 5)
   --fps [F]                    Capturas por FPS (p.e. 0.5)
   --clip [start] [end] [s]     Clip acelerado: inicio, fin, factor (defecto 2.0)
@@ -48,6 +49,7 @@ DO_SHOTS=0; SHOTS_N=5
 DO_FPS=0; FPS_VAL=0.0
 DO_CLIP=0; CLIP_S=""; CLIP_E=""; CLIP_SPEED="2.0"
 DO_TRANS=0; T_FMT="txt"; T_LANG="auto"; DO_SLIDES=0; SL_METHOD="phash"; SL_THRESH=""
+DO_DUB=0; DUB_LANG="es"
 DO_ALL=0
 
 while [[ $# -gt 0 ]]; do
@@ -59,6 +61,11 @@ while [[ $# -gt 0 ]]; do
       [[ $# -lt 2 || "$2" == -* ]] && { err "Falta valor para --outdir"; usage; exit 2; }
       OUTDIR="$2"; shift 2;;
     --audio) DO_AUDIO=1; shift;;
+    --dub)
+      DO_DUB=1
+      shift
+      if [[ $# -gt 0 && "$1" != -* ]]; then DUB_LANG="$1"; shift; fi
+      ;;
     --shots)
       DO_SHOTS=1
       shift
@@ -125,6 +132,9 @@ if (( DO_TRANS )); then
     *) err "--transcribe formato inválido: $T_FMT (usa txt|srt|vtt|json)"; exit 2;;
   esac
 fi
+if (( DO_DUB )) && ! [[ "$DUB_LANG" =~ ^[A-Za-z]{2}(-[A-Za-z]{2})?$ ]]; then
+  err "--dub idioma inválido: $DUB_LANG (ejemplo: es, en, pt-BR)"; exit 2
+fi
 
 TMPDIR="$(mktemp -d)"
 trap 'rm -rf "$TMPDIR"' EXIT
@@ -182,13 +192,18 @@ if (( DO_ALL )); then
   DO_AUDIO=1; DO_SHOTS=1; SHOTS_N=5; DO_CLIP=1; CLIP_S=""; CLIP_E=""; CLIP_SPEED="2.0"; DO_TRANS=1; T_FMT="txt"; T_LANG="auto"
 fi
 
-if (( DO_SLIDES || DO_TRANS )); then
+if (( DO_SLIDES || DO_TRANS || DO_DUB )); then
   need python3
 fi
 
 CAPTURE_DIR=""
+MP3_PATH="$OUTDIR/${VID_ID}.mp3"
 if (( DO_AUDIO )); then
-  extract_audio "$IN" "$OUTDIR/${VID_ID}.mp3"
+  extract_audio "$IN" "$MP3_PATH"
+fi
+if (( DO_DUB )) && [[ ! -f "$MP3_PATH" ]]; then
+  log "Generando MP3 base para doblaje…"
+  extract_audio "$IN" "$MP3_PATH"
 fi
 if (( DO_SHOTS )); then
   screenshots_interval "$IN" "$OUTDIR/shots" "$SHOTS_N"
@@ -227,12 +242,20 @@ if (( DO_CLIP )); then
 fi
 
 if (( DO_TRANS )); then
-  MP3_PATH="$OUTDIR/${VID_ID}.mp3"
   if [[ -f "$MP3_PATH" ]]; then
     log "Transcribiendo MP3 → formato ${T_FMT} idioma ${T_LANG}"
     python3 "${ROOT_DIR}/python/transcribe_audio.py" --in "$MP3_PATH" --format "$T_FMT" --lang "$T_LANG" --outdir "$OUTDIR"
   else
     err "No se encontró MP3 para transcribir: $MP3_PATH (usa --audio o --all)"
+    exit 1
+  fi
+fi
+if (( DO_DUB )); then
+  if [[ -f "$MP3_PATH" ]]; then
+    log "Doblando MP3 → idioma ${DUB_LANG}"
+    python3 "${ROOT_DIR}/python/dub_translate_audio.py" --in "$MP3_PATH" --target-lang "$DUB_LANG" --outdir "$OUTDIR"
+  else
+    err "No se encontró MP3 para doblar: $MP3_PATH"
     exit 1
   fi
 fi
