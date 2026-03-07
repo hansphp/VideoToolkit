@@ -26,7 +26,7 @@ _ocr_unavailable_warned = False
 def _count_words_ocr(img_path, lang="eng+spa"):
     """
     Return the number of words detected via Tesseract OCR.
-    Falls back to 0 if pytesseract or tesseract binary are not available.
+    Returns None if OCR is unavailable so caller can skip text filtering.
     """
     global _ocr_unavailable_warned
     try:
@@ -51,7 +51,7 @@ def _count_words_ocr(img_path, lang="eng+spa"):
         if not _ocr_unavailable_warned:
             print(f"[select_slides] Warning: OCR unavailable or failed ({e}). Skipping text-count filter.", file=sys.stderr)
             _ocr_unavailable_warned = True
-        return 0
+        return None
 
 def _is_blurry(img_path, threshold=100.0):
     """
@@ -178,7 +178,7 @@ def main():
             # Text/word count check via OCR
             if args.min_words > 0:
                 wc = _count_words_ocr(fp, lang=args.ocr_lang)
-                if wc < args.min_words:
+                if wc is not None and wc < args.min_words:
                     continue
             shutil.copy2(fp, outdir / fp.name)
             kept += 1

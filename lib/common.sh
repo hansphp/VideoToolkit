@@ -13,9 +13,18 @@ need() {
   fi
 }
 
+# Ensure ffmpeg is available only when needed by video/audio ops.
+ensure_ffmpeg() {
+  if [[ "${_HAS_FFMPEG:-0}" -eq 0 ]]; then
+    need ffmpeg
+    _HAS_FFMPEG=1
+  fi
+}
+
 # Extract audio to MP3 (320 kbps)
 extract_audio() {
   local in="$1"; local out="$2";
+  ensure_ffmpeg
   log "Extrayendo audio MP3 → $out"
   ffmpeg -y -i "$in" -vn -acodec libmp3lame -ar 44100 -b:a 320k "$out"
 }
@@ -23,6 +32,7 @@ extract_audio() {
 # Take screenshots at regular interval (seconds)
 screenshots_interval() {
   local in="$1"; local outdir="$2"; local interval="$3"
+  ensure_ffmpeg
   mkdir -p "$outdir"
   log "Capturas cada ${interval}s → $outdir"
   ffmpeg -y -i "$in" -vf fps=1/"$interval" -q:v 2 "$outdir"/shot-%04d.jpg
@@ -31,6 +41,7 @@ screenshots_interval() {
 # Take screenshots based on FPS
 screenshots_fps() {
   local in="$1"; local outdir="$2"; local fps="$3"
+  ensure_ffmpeg
   mkdir -p "$outdir"
   log "Capturas a ${fps} fps → $outdir"
   ffmpeg -y -i "$in" -vf fps="$fps" -q:v 2 "$outdir"/shot-%04d.jpg
@@ -40,6 +51,7 @@ screenshots_fps() {
 speed_clip() {
   local in="$1"; local out="$2"; local start="${3:-}"; local end="${4:-}"; local speed="${5:-2.0}"
   need bc
+  ensure_ffmpeg
   # Build audio atempo chain (splitting >2.0 into 2.0* remainder)
   local remain="$speed"; local atempo_chain=""
   while (( $(echo "$remain > 2.0" | bc -l) )); do

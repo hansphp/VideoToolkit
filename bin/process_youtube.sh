@@ -72,12 +72,32 @@ TMPDIR="$(mktemp -d)"
 trap 'rm -rf "$TMPDIR"' EXIT
 
 log "Descargando video…"
-yt-dlp -f "bv*[ext=mp4]+ba[ext=m4a]/b[ext=mp4]/bv*+ba/b" -o "${TMPDIR}/%(id)s.%(ext)s" "$URL"
+YTDLP_FORMAT='bv*[ext=mp4]+ba[ext=m4a]/b[ext=mp4]/bv*+ba/b'
+YTDLP_EXTRACTOR_ARGS="${YTDLP_EXTRACTOR_ARGS:-youtube:player_client=android,ios,tv}"
+YTDLP_COOKIES_FROM_BROWSER="${YTDLP_COOKIES_FROM_BROWSER:-}"
+
+YT_CMD=(
+  yt-dlp
+  --extractor-args "$YTDLP_EXTRACTOR_ARGS"
+  --retries 10
+  --fragment-retries 10
+  --extractor-retries 3
+  --socket-timeout 15
+  -f "$YTDLP_FORMAT"
+  -o "${TMPDIR}/%(id)s.%(ext)s"
+)
+
+if [[ -n "$YTDLP_COOKIES_FROM_BROWSER" ]]; then
+  YT_CMD+=(--cookies-from-browser "$YTDLP_COOKIES_FROM_BROWSER")
+fi
+
+"${YT_CMD[@]}" "$URL"
 DL_FILE="$(ls -1 ${TMPDIR}/*.mp4 2>/dev/null | head -n1 || true)"
 if [[ -z "${DL_FILE}" ]]; then
   ANY_FILE="$(ls -1 ${TMPDIR}/* | head -n1)"
   DL_FILE="${TMPDIR}/video.mp4"
   log "Convirtiendo a MP4 → ${DL_FILE}"
+  need ffmpeg
   ffmpeg -y -i "$ANY_FILE" -c:v libx264 -c:a aac -movflags +faststart "$DL_FILE"
 fi
 

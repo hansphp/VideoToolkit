@@ -16,7 +16,7 @@ En Linux o macOS abre una terminal, ubícate en el directorio del proyecto y cre
 
 ```bash
 # crear y activar el venv
-python3 -m venv .venv
+python3.12 -m venv .venv
 source .venv/bin/activate
 # actualizar pip e instalar dependencias
 python -m pip install --upgrade pip
@@ -92,7 +92,7 @@ Todas estas funciones pueden combinarse libremente en los scripts `process_mkv.s
 ## Requisitos y dependencias
 
 1. **ffmpeg** y **ffprobe** en el `PATH`.  Puedes instalarlos mediante el paquete `ffmpeg` en Linux, Homebrew (`brew install ffmpeg`) en macOS o descargando los builds de Windows y agregando la carpeta `bin` a tu `PATH`.  Alternativamente utiliza **WSL** o Git Bash en Windows.
-2. **Python 3** con las librerías listadas en `requirements.txt`.  Incluye `yt‑dlp` para descargar videos de YouTube y `faster‑whisper` para transcribir audio.
+2. **Python 3.10 o superior** con las librerías listadas en `requirements.txt`.  Incluye `yt‑dlp` para descargar videos de YouTube y `faster‑whisper` para transcribir audio.
 3. **bash** (disponible por defecto en Linux/macOS y en WSL para Windows).  Para usar únicamente ffmpeg y prescindir de los scripts puedes consultar las líneas de ejemplo en la sección de Windows más abajo.
 
 ## Estructura del proyecto
@@ -178,6 +178,24 @@ python python/select_slides.py \
 
 La opción avanzada `--min-gap N` ignora los siguientes `N‑1` fotogramas tras una imagen seleccionada, evitando ráfagas de diapositivas muy próximas.
 
+#### OCR y filtro de texto (`min-words`)
+
+El selector también puede descartar imágenes con poco texto (por defecto `--min-words 2`) usando OCR con `pytesseract`.
+
+- Si `tesseract` está instalado, se aplica el filtro de palabras normalmente.
+- Si `tesseract` no está disponible, el script muestra un warning y **omite** ese filtro (no descarta todo).
+
+Si quieres desactivar explícitamente el filtro de texto:
+
+```bash
+python python/select_slides.py \
+  --in out/clase/shots \
+  --outdir out/clase/slides \
+  --method ssim \
+  --threshold 0.20 \
+  --min-words 0
+```
+
 ## Transcripción de audio a texto
 
 La transcripción se realiza con **faster‑whisper**, que soporta modelos multilingües.  Puedes integrarla en el flujo con `--transcribe` o ejecutarla de forma independiente:
@@ -202,6 +220,66 @@ Para audios largos en CPU se recomienda usar modelos `tiny` o `base` para mayor 
 ## Notas y consejos
 
 - Si obtienes un error del tipo “command not found: ffmpeg/ffprobe”, instala ffmpeg y asegúrate de que su ruta `bin` esté en la variable `PATH`.
+- Si ves `OCR unavailable or failed (...)` durante `--slides`, instala `tesseract` para habilitar el filtro por texto (o usa `--min-words 0` para desactivarlo).
 - Para velocidades de clip altas (>2x), la cadena de filtros de audio `atempo` puede distorsionar el sonido; prueba valores entre 2x y 4x para obtener resultados aceptables.
-- YouTube puede aplicar limitaciones temporales al descargar.  Si notas que la descarga se detiene, añade `--sleep‑requests 1` a la llamada de `yt‑dlp` en los scripts.
+- Si `yt-dlp` devuelve `HTTP Error 403: Forbidden`, actualiza a Python 3.10+ y reinstala dependencias.  También puedes exportar `YTDLP_COOKIES_FROM_BROWSER` (por ejemplo `chrome` o `safari`) para pasar cookies al script de YouTube.
 - En Windows puro (sin WSL), puedes replicar las funciones básicas con ffmpeg en PowerShell.  Consulta la sección de Notas técnicas en el README original para ejemplos.
+
+### Solución rápida: `ffmpeg: command not found`
+
+Si ves un error como:
+
+```bash
+/Users/juantopo/Proyectos/VideoToolkit/lib/common.sh: line 20: ffmpeg: command not found
+```
+
+instala `ffmpeg` y verifica que quedó en el `PATH`:
+
+```bash
+# macOS (Homebrew)
+brew install ffmpeg
+
+# Ubuntu/Debian
+sudo apt update && sudo apt install -y ffmpeg
+
+# Fedora
+sudo dnf install -y ffmpeg
+```
+
+En Windows (PowerShell):
+
+```powershell
+winget install Gyan.FFmpeg
+# o
+choco install ffmpeg
+```
+
+Verificación:
+
+```bash
+ffmpeg -version
+ffprobe -version
+```
+
+### Solución rápida: `OCR unavailable or failed (tesseract...)`
+
+Instala `tesseract` en tu sistema:
+
+```bash
+# macOS (Homebrew)
+brew install tesseract
+
+# Ubuntu/Debian
+sudo apt update && sudo apt install -y tesseract-ocr
+
+# Fedora
+sudo dnf install -y tesseract
+```
+
+En Windows (PowerShell):
+
+```powershell
+winget install UB-Mannheim.TesseractOCR
+# o
+choco install tesseract
+```
