@@ -17,13 +17,20 @@ Notes on thresholds:
 - ssim: threshold is a fraction. keep if (1 - SSIM) >= threshold. Typical 0.10..0.25.
 - hist: threshold is a fraction. keep if (1 - correlation) >= threshold. Typical 0.20..0.40.
 """
-import argparse, os, sys, shutil, re
+import argparse, sys, shutil, re
 from pathlib import Path
 
 # --- Added helpers for slide validation (text count & blur) ---
 _ocr_unavailable_warned = False
 
-def _count_words_ocr(img_path, lang="eng+spa"):
+def _load_bgr(img_path):
+    try:
+        import cv2
+        return cv2.imread(str(img_path))
+    except Exception:
+        return None
+
+def _count_words_ocr(img_path, lang="eng+spa", bgr=None):
     """
     Return the number of words detected via Tesseract OCR.
     Returns None if OCR is unavailable so caller can skip text filtering.
@@ -31,7 +38,7 @@ def _count_words_ocr(img_path, lang="eng+spa"):
     global _ocr_unavailable_warned
     try:
         import cv2, pytesseract
-        img = cv2.imread(str(img_path))
+        img = bgr if bgr is not None else cv2.imread(str(img_path))
         if img is None:
             return 0
         # Preprocess a bit for better OCR
@@ -53,14 +60,14 @@ def _count_words_ocr(img_path, lang="eng+spa"):
             _ocr_unavailable_warned = True
         return None
 
-def _is_blurry(img_path, threshold=100.0):
+def _is_blurry(img_path, threshold=100.0, bgr=None):
     """
     Detect blur using the variance of Laplacian.
     Returns True if image is considered blurry (variance < threshold).
     """
     try:
         import cv2
-        img = cv2.imread(str(img_path))
+        img = bgr if bgr is not None else cv2.imread(str(img_path))
         if img is None:
             return True
         gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
@@ -74,18 +81,24 @@ def _is_blurry(img_path, threshold=100.0):
         return False
 # --- End helpers ---
 
-def phash_distance(img_path, last_hash):
+def phash_distance(img_path, last_hash, bgr=None):
     from PIL import Image
     import imagehash
-    h = imagehash.phash(Image.open(img_path).convert("RGB"))
+    if bgr is not None:
+        import cv2
+        rgb = cv2.cvtColor(bgr, cv2.COLOR_BGR2RGB)
+        h = imagehash.phash(Image.fromarray(rgb))
+    else:
+        with Image.open(img_path) as im:
+            h = imagehash.phash(im.convert("RGB"))
     if last_hash is None:
         return 9999, h
     return h - last_hash, h  # Hamming distance
 
-def ssim_diff(img_path, last_img):
+def ssim_diff(img_path, last_img, bgr=None):
     import cv2
     from skimage.metrics import structural_similarity as ssim
-    img = cv2.imread(str(img_path))
+    img = bgr if bgr is not None else cv2.imread(str(img_path))
     if img is None:
         return 0.0, None
     img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
@@ -96,9 +109,9 @@ def ssim_diff(img_path, last_img):
     diff = 1.0 - float(score)  # larger diff = more change
     return diff, img
 
-def hist_diff(img_path, last_hist):
-    import cv2, numpy as np
-    img = cv2.imread(str(img_path))
+def hist_diff(img_path, last_hist, bgr=None):
+    import cv2
+    img = bgr if bgr is not None else cv2.imread(str(img_path))
     if img is None:
         return 0.0, None
     hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
@@ -149,22 +162,29 @@ def main():
     last_hash = None
     last_img  = None
     last_hist = None
+    needs_bgr = (
+        args.method in ("ssim", "hist")
+        or args.blur_thresh >= 0
+        or args.min_words > 0
+    )
 
     for fp in frames:
         if gap > 0:
             gap -= 1
             continue
 
+        frame_bgr = _load_bgr(fp) if needs_bgr else None
+
         if args.method == "phash":
-            d, new_hash = phash_distance(fp, last_hash)
+            d, new_hash = phash_distance(fp, last_hash, bgr=frame_bgr)
             keep = (d >= thr) or (last_hash is None)
             last_hash = new_hash
         elif args.method == "ssim":
-            d, new_img = ssim_diff(fp, last_img)
+            d, new_img = ssim_diff(fp, last_img, bgr=frame_bgr)
             keep = (d >= thr) or (last_img is None)
             last_img = new_img
         else:
-            d, new_hist = hist_diff(fp, last_hist)
+            d, new_hist = hist_diff(fp, last_hist, bgr=frame_bgr)
             keep = (d >= thr) or (last_hist is None)
             last_hist = new_hist
 
@@ -173,11 +193,11 @@ def main():
             # Additional validation: skip blurry or low-text slides
             # Blur check
             if args.blur_thresh >= 0:
-                if _is_blurry(fp, args.blur_thresh):
+                if _is_blurry(fp, args.blur_thresh, bgr=frame_bgr):
                     continue
             # Text/word count check via OCR
             if args.min_words > 0:
-                wc = _count_words_ocr(fp, lang=args.ocr_lang)
+                wc = _count_words_ocr(fp, lang=args.ocr_lang, bgr=frame_bgr)
                 if wc is not None and wc < args.min_words:
                     continue
             shutil.copy2(fp, outdir / fp.name)

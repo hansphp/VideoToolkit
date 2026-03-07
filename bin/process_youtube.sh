@@ -30,6 +30,18 @@ Ejemplos:
 USAGE
 }
 
+is_number() {
+  [[ "${1:-}" =~ ^([0-9]+([.][0-9]+)?|[.][0-9]+)$ ]]
+}
+
+is_positive_number() {
+  is_number "$1" && awk "BEGIN { exit !($1 > 0) }"
+}
+
+is_non_negative_number() {
+  is_number "$1" && awk "BEGIN { exit !($1 >= 0) }"
+}
+
 URL=""; OUTDIR=""
 DO_AUDIO=0
 DO_SHOTS=0; SHOTS_N=5
@@ -40,26 +52,46 @@ DO_ALL=0
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --url) URL="$2"; shift 2;;
-    --outdir) OUTDIR="$2"; shift 2;;
+    --url)
+      [[ $# -lt 2 || "$2" == -* ]] && { err "Falta valor para --url"; usage; exit 2; }
+      URL="$2"; shift 2;;
+    --outdir)
+      [[ $# -lt 2 || "$2" == -* ]] && { err "Falta valor para --outdir"; usage; exit 2; }
+      OUTDIR="$2"; shift 2;;
     --audio) DO_AUDIO=1; shift;;
-    --shots) DO_SHOTS=1; SHOTS_N="${2:-5}"; shift 2;;
-    --fps) DO_FPS=1; FPS_VAL="${2:-0.5}"; shift 2;;
+    --shots)
+      DO_SHOTS=1
+      shift
+      if [[ $# -gt 0 && "$1" != -* ]]; then
+        SHOTS_N="$1"; shift
+      fi
+      ;;
+    --fps)
+      DO_FPS=1
+      shift
+      if [[ $# -gt 0 && "$1" != -* ]]; then
+        FPS_VAL="$1"; shift
+      fi
+      ;;
     --clip)
       DO_CLIP=1
-      CLIP_S="${2:-}"; CLIP_E="${3:-}"; CLIP_SPEED="${4:-2.0}"
-      if [[ $# -ge 4 ]]; then shift 4; else shift 1; fi
+      shift
+      if [[ $# -gt 0 && "$1" != -* ]]; then CLIP_S="$1"; shift; fi
+      if [[ $# -gt 0 && "$1" != -* ]]; then CLIP_E="$1"; shift; fi
+      if [[ $# -gt 0 && "$1" != -* ]]; then CLIP_SPEED="$1"; shift; fi
       ;;
     --transcribe)
       DO_TRANS=1
-      T_FMT="${2:-txt}"; T_LANG="${3:-auto}"
-      if [[ $# -ge 3 ]]; then shift 3; else shift 1; fi
+      shift
+      if [[ $# -gt 0 && "$1" != -* ]]; then T_FMT="$1"; shift; fi
+      if [[ $# -gt 0 && "$1" != -* ]]; then T_LANG="$1"; shift; fi
       ;;
     --all) DO_ALL=1; shift;;
     --slides)
       DO_SLIDES=1
-      SL_METHOD="${2:-phash}"; SL_THRESH="${3:-}"
-      if [[ $# -ge 3 ]]; then shift 3; else shift 1; fi
+      shift
+      if [[ $# -gt 0 && "$1" != -* ]]; then SL_METHOD="$1"; shift; fi
+      if [[ $# -gt 0 && "$1" != -* ]]; then SL_THRESH="$1"; shift; fi
       ;;
     -h|--help) usage; exit 0;;
     *) err "Opción desconocida: $1"; usage; exit 2;;
@@ -67,6 +99,32 @@ while [[ $# -gt 0 ]]; do
 done
 
 [[ -z "$URL" ]] && { err "Falta --url"; usage; exit 2; }
+if (( DO_SHOTS )); then
+  if ! [[ "$SHOTS_N" =~ ^[0-9]+$ ]] || (( SHOTS_N <= 0 )); then
+    err "--shots requiere un entero > 0 (recibido: $SHOTS_N)"; exit 2
+  fi
+fi
+if (( DO_FPS )) && ! is_positive_number "$FPS_VAL"; then
+  err "--fps requiere un número > 0 (recibido: $FPS_VAL)"; exit 2
+fi
+if (( DO_CLIP )) && ! is_positive_number "$CLIP_SPEED"; then
+  err "--clip velocidad requiere un número > 0 (recibido: $CLIP_SPEED)"; exit 2
+fi
+if (( DO_SLIDES )); then
+  case "$SL_METHOD" in
+    phash|ssim|hist) ;;
+    *) err "--slides método inválido: $SL_METHOD (usa phash|ssim|hist)"; exit 2;;
+  esac
+  if [[ -n "$SL_THRESH" ]] && ! is_non_negative_number "$SL_THRESH"; then
+    err "--slides threshold debe ser numérico y >= 0 (recibido: $SL_THRESH)"; exit 2
+  fi
+fi
+if (( DO_TRANS )); then
+  case "$T_FMT" in
+    txt|srt|vtt|json) ;;
+    *) err "--transcribe formato inválido: $T_FMT (usa txt|srt|vtt|json)"; exit 2;;
+  esac
+fi
 
 TMPDIR="$(mktemp -d)"
 trap 'rm -rf "$TMPDIR"' EXIT
@@ -92,9 +150,20 @@ if [[ -n "$YTDLP_COOKIES_FROM_BROWSER" ]]; then
 fi
 
 "${YT_CMD[@]}" "$URL"
-DL_FILE="$(ls -1 ${TMPDIR}/*.mp4 2>/dev/null | head -n1 || true)"
-if [[ -z "${DL_FILE}" ]]; then
-  ANY_FILE="$(ls -1 ${TMPDIR}/* | head -n1)"
+shopt -s nullglob
+mp4_files=("${TMPDIR}"/*.mp4)
+shopt -u nullglob
+if (( ${#mp4_files[@]} > 0 )); then
+  DL_FILE="${mp4_files[0]}"
+else
+  shopt -s nullglob
+  any_files=("${TMPDIR}"/*)
+  shopt -u nullglob
+  if (( ${#any_files[@]} == 0 )); then
+    err "yt-dlp no descargó archivos para: $URL"
+    exit 1
+  fi
+  ANY_FILE="${any_files[0]}"
   DL_FILE="${TMPDIR}/video.mp4"
   log "Convirtiendo a MP4 → ${DL_FILE}"
   need ffmpeg
@@ -113,27 +182,44 @@ if (( DO_ALL )); then
   DO_AUDIO=1; DO_SHOTS=1; SHOTS_N=5; DO_CLIP=1; CLIP_S=""; CLIP_E=""; CLIP_SPEED="2.0"; DO_TRANS=1; T_FMT="txt"; T_LANG="auto"
 fi
 
+if (( DO_SLIDES || DO_TRANS )); then
+  need python3
+fi
+
+CAPTURE_DIR=""
 if (( DO_AUDIO )); then
   extract_audio "$IN" "$OUTDIR/${VID_ID}.mp3"
 fi
 if (( DO_SHOTS )); then
   screenshots_interval "$IN" "$OUTDIR/shots" "$SHOTS_N"
+  CAPTURE_DIR="$OUTDIR/shots"
 fi
 if (( DO_FPS )); then
   screenshots_fps "$IN" "$OUTDIR/shots_fps" "$FPS_VAL"
+  if [[ -z "$CAPTURE_DIR" ]]; then
+    CAPTURE_DIR="$OUTDIR/shots_fps"
+  fi
 fi
 
 if (( DO_SLIDES )); then
-  SHOTS_DIR="$OUTDIR/shots"
-  if [[ -d "$SHOTS_DIR" ]]; then
-    log "Seleccionando diapositivas únicas → $OUTDIR/slides (método $SL_METHOD, umbral ${SL_THRESH:-auto})"
-    if [[ -n "$SL_THRESH" ]]; then
-      python3 "${ROOT_DIR}/python/select_slides.py" --in "$SHOTS_DIR" --outdir "$OUTDIR/slides" --min-words 2 --ocr-lang "eng+spa" --method "$SL_METHOD" --threshold "$SL_THRESH"
-    else
-      python3 "${ROOT_DIR}/python/select_slides.py" --in "$SHOTS_DIR" --outdir "$OUTDIR/slides" --min-words 2 --ocr-lang "eng+spa" --method "$SL_METHOD"
+  SHOTS_DIR="$CAPTURE_DIR"
+  if [[ -z "$SHOTS_DIR" ]]; then
+    if [[ -d "$OUTDIR/shots" ]]; then
+      SHOTS_DIR="$OUTDIR/shots"
+    elif [[ -d "$OUTDIR/shots_fps" ]]; then
+      SHOTS_DIR="$OUTDIR/shots_fps"
     fi
+  fi
+  if [[ -z "$SHOTS_DIR" || ! -d "$SHOTS_DIR" ]]; then
+    err "No existe directorio de capturas para --slides (genera con --shots o --fps)"
+    exit 1
+  fi
+
+  log "Seleccionando diapositivas únicas → $OUTDIR/slides (método $SL_METHOD, umbral ${SL_THRESH:-auto})"
+  if [[ -n "$SL_THRESH" ]]; then
+    python3 "${ROOT_DIR}/python/select_slides.py" --in "$SHOTS_DIR" --outdir "$OUTDIR/slides" --min-words 2 --ocr-lang "eng+spa" --method "$SL_METHOD" --threshold "$SL_THRESH"
   else
-    err "No existe el directorio de capturas: $SHOTS_DIR (usa --shots o --fps antes de --slides)"
+    python3 "${ROOT_DIR}/python/select_slides.py" --in "$SHOTS_DIR" --outdir "$OUTDIR/slides" --min-words 2 --ocr-lang "eng+spa" --method "$SL_METHOD"
   fi
 fi
 if (( DO_CLIP )); then
@@ -147,6 +233,7 @@ if (( DO_TRANS )); then
     python3 "${ROOT_DIR}/python/transcribe_audio.py" --in "$MP3_PATH" --format "$T_FMT" --lang "$T_LANG" --outdir "$OUTDIR"
   else
     err "No se encontró MP3 para transcribir: $MP3_PATH (usa --audio o --all)"
+    exit 1
   fi
 fi
 

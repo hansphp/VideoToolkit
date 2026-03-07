@@ -110,12 +110,24 @@ VideoToolkit/
 │  └─ select_slides.py       # Lógica de filtrado con OpenCV
 ├─ lib/
 │  └─ common.sh              # Funciones reutilizables (audio, capturas, clips)
+├─ tests/
+│  └─ test_cli.sh            # Pruebas CLI (parseo/opciones/errores)
 ├─ out/                      # Carpeta donde se guardan las salidas
 ├─ requirements.txt          # Dependencias Python
 └─ README.md                 # Esta guía
 ```
 
 El directorio `out/` se crea dinámicamente.  Allí encontrarás una subcarpeta para cada video procesado.  El nombre de la subcarpeta coincide con el nombre del archivo de entrada (para `.mkv`) o con el ID del video de YouTube.
+
+## Pruebas rápidas
+
+Puedes ejecutar una batería rápida de pruebas de CLI con:
+
+```bash
+bash tests/test_cli.sh
+```
+
+Estas pruebas usan herramientas simuladas (stubs) para validar parseo de opciones, códigos de salida y flujos críticos sin descargar videos reales.
 
 ## Uso general de los scripts
 
