@@ -140,6 +140,11 @@ expect_failure() {
 
 INPUT="$TMP_ROOT/input.mp4"
 : > "$INPUT"
+BATCH_DIR="$TMP_ROOT/input-batch"
+mkdir -p "$BATCH_DIR"
+: > "$BATCH_DIR/one.mp4"
+: > "$BATCH_DIR/two.mkv"
+mkdir -p "$TMP_ROOT/empty-batch"
 
 expect_success mkv_clip_single_arg \
   "$ROOT_DIR/bin/process_mkv.sh" --in "$INPUT" --clip 00:00:01 --outdir "$TMP_ROOT/out-mkv-clip"
@@ -172,6 +177,16 @@ grep -F -- "dub_translate_audio.py --in $TMP_ROOT/out-mkv-dub-video-default/inpu
 
 expect_failure mkv_dub_invalid_lang \
   "$ROOT_DIR/bin/process_mkv.sh" --in "$INPUT" --dub spanish --outdir "$TMP_ROOT/out-mkv-dub-invalid"
+
+expect_success batch_slides_transcribe \
+  "$ROOT_DIR/bin/process_folder.sh" --indir "$BATCH_DIR" --outdir-root "$TMP_ROOT/out-batch" -- --shots 1 --slides ssim 0.2 --audio --transcribe txt en
+[[ -f "$TMP_ROOT/out-batch/one/one.txt" ]] || fail "batch first transcript missing"
+[[ -f "$TMP_ROOT/out-batch/two/two.txt" ]] || fail "batch second transcript missing"
+[[ -d "$TMP_ROOT/out-batch/one/slides" ]] || fail "batch first slides missing"
+[[ -d "$TMP_ROOT/out-batch/two/slides" ]] || fail "batch second slides missing"
+
+expect_failure batch_empty_dir \
+  "$ROOT_DIR/bin/process_folder.sh" --indir "$TMP_ROOT/empty-batch" -- --audio
 
 expect_success yt_clip_single_arg \
   "$ROOT_DIR/bin/process_youtube.sh" --url "https://youtube.com/watch?v=test" --clip 00:00:01 --outdir "$TMP_ROOT/out-yt-clip"

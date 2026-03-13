@@ -107,6 +107,7 @@ La organización interna sigue un diseño modular:
 VideoToolkit/
 ├─ bin/
 │  ├─ process_mkv.sh         # Procesa archivos .mkv
+│  ├─ process_folder.sh      # Procesa carpetas completas de videos locales
 │  ├─ process_youtube.sh     # Procesa URLs de YouTube
 │  └─ transcribe.sh          # Transcribe audios existentes
 ├─ python/
@@ -186,6 +187,19 @@ bin/process_youtube.sh --url "https://www.youtube.com/watch?v=abc" --shots 5 --s
 # Doblaje/traducción automática a español
 bin/process_youtube.sh --url "https://www.youtube.com/watch?v=abc" --dub es
 ```
+
+### Procesar una carpeta completa de videos locales
+
+Si tienes una carpeta como `input/` con varios `.mp4` y `.mkv`, puedes procesarlos uno por uno con `process_folder.sh`.  Las opciones después de `--` se reenvían a `process_mkv.sh` para cada archivo:
+
+```bash
+bin/process_folder.sh \
+  --indir input \
+  --outdir-root out/lote \
+  -- --shots 1 --slides ssim 0.20 --audio --transcribe txt en
+```
+
+Esto generará una subcarpeta por video dentro de `out/lote/`.
 
 ### Selección de diapositivas clave
 
