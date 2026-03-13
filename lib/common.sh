@@ -47,6 +47,14 @@ screenshots_fps() {
   ffmpeg -y -i "$in" -vf fps="$fps" -q:v 2 "$outdir"/shot-%04d.jpg
 }
 
+# Replace the source audio with another track while preserving video stream.
+mux_video_audio() {
+  local video_in="$1"; local audio_in="$2"; local out="$3"
+  ensure_ffmpeg
+  log "Combinando video + audio doblado → $out"
+  ffmpeg -y -i "$video_in" -i "$audio_in" -map 0:v:0 -map 1:a:0 -c:v copy -c:a aac -shortest "$out"
+}
+
 # Create speeded clip; optional trim; audio atempo chain
 speed_clip() {
   local in="$1"; local out="$2"; local start="${3:-}"; local end="${4:-}"; local speed="${5:-2.0}"

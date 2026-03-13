@@ -13,6 +13,7 @@ Opciones (elige una o varias):
   --slides [method] [threshold]  Seleccionar 'diapositivas' únicas desde shots (method: phash|ssim|hist; threshold depende del método)
   --audio                      Extraer MP3 (320 kbps)
   --dub [lang]                Traducir/doblar el audio a otro idioma (default: es) y generar MP3
+  --dub-video [lang]          Generar MP4 final con audio doblado al idioma indicado (default: es)
   --shots [N]                  Capturas cada N segundos (defecto 5)
   --fps [F]                    Capturas por FPS (p.e. 0.5 = una cada 2s)
   --clip [start] [end] [s]     Clip acelerado: inicio, fin, y factor (defecto 2.0). Tiempos HH:MM:SS
@@ -24,6 +25,7 @@ Opciones (elige una o varias):
 Ejemplos:
   process_mkv.sh --in clase.mkv --audio
   process_mkv.sh --in clase.mp4 --shots 1 --slides ssim 0.20 --audio --transcribe txt en
+  process_mkv.sh --in clase.mp4 --dub-video es
   process_mkv.sh --in clase.mkv --shots 3
   process_mkv.sh --in clase.mkv --fps 0.5
   process_mkv.sh --in clase.mkv --clip 00:01:00 00:05:00 2.5
@@ -50,6 +52,7 @@ DO_FPS=0; FPS_VAL=0.0
 DO_CLIP=0; CLIP_S=""; CLIP_E=""; CLIP_SPEED="2.0"
 DO_TRANS=0; T_FMT="txt"; T_LANG="auto"; DO_SLIDES=0; SL_METHOD="phash"; SL_THRESH=""
 DO_DUB=0; DUB_LANG="es"
+DO_DUB_VIDEO=0
 DO_ALL=0
 
 while [[ $# -gt 0 ]]; do
@@ -63,6 +66,12 @@ while [[ $# -gt 0 ]]; do
     --audio) DO_AUDIO=1; shift;;
     --dub)
       DO_DUB=1
+      shift
+      if [[ $# -gt 0 && "$1" != -* ]]; then DUB_LANG="$1"; shift; fi
+      ;;
+    --dub-video)
+      DO_DUB=1
+      DO_DUB_VIDEO=1
       shift
       if [[ $# -gt 0 && "$1" != -* ]]; then DUB_LANG="$1"; shift; fi
       ;;
@@ -213,6 +222,15 @@ if (( DO_DUB )); then
     python3 "${ROOT_DIR}/python/dub_translate_audio.py" --in "$MP3_PATH" --target-lang "$DUB_LANG" --outdir "$OUTDIR"
   else
     err "No se encontró MP3 para doblar: $MP3_PATH"
+    exit 1
+  fi
+fi
+if (( DO_DUB_VIDEO )); then
+  DUB_MP3_PATH="$OUTDIR/${name}_dub_${DUB_LANG}.mp3"
+  if [[ -f "$DUB_MP3_PATH" ]]; then
+    mux_video_audio "$IN" "$DUB_MP3_PATH" "$OUTDIR/${name}_${DUB_LANG}.mp4"
+  else
+    err "No se encontró audio doblado para crear el video final: $DUB_MP3_PATH"
     exit 1
   fi
 fi

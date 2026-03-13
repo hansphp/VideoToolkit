@@ -164,6 +164,12 @@ expect_success mkv_dub_default_lang \
 grep -F -- "dub_translate_audio.py --in $TMP_ROOT/out-mkv-dub-default/input.mp3 --target-lang es --outdir $TMP_ROOT/out-mkv-dub-default" "$TEST_PYTHON3_LOG" >/dev/null || fail "mkv dub default language not applied"
 [[ -f "$TMP_ROOT/out-mkv-dub-default/input_dub_es.mp3" ]] || fail "mkv dub output missing"
 
+expect_success mkv_dub_video_default_lang \
+  "$ROOT_DIR/bin/process_mkv.sh" --in "$INPUT" --dub-video --outdir "$TMP_ROOT/out-mkv-dub-video-default"
+grep -F -- "dub_translate_audio.py --in $TMP_ROOT/out-mkv-dub-video-default/input.mp3 --target-lang es --outdir $TMP_ROOT/out-mkv-dub-video-default" "$TEST_PYTHON3_LOG" >/dev/null || fail "mkv dub-video default language not applied"
+[[ -f "$TMP_ROOT/out-mkv-dub-video-default/input_dub_es.mp3" ]] || fail "mkv dub-video mp3 output missing"
+[[ -f "$TMP_ROOT/out-mkv-dub-video-default/input_es.mp4" ]] || fail "mkv dub-video mp4 output missing"
+
 expect_failure mkv_dub_invalid_lang \
   "$ROOT_DIR/bin/process_mkv.sh" --in "$INPUT" --dub spanish --outdir "$TMP_ROOT/out-mkv-dub-invalid"
 
@@ -182,5 +188,11 @@ expect_success yt_dub_default_lang \
   "$ROOT_DIR/bin/process_youtube.sh" --url "https://youtube.com/watch?v=test" --dub --outdir "$TMP_ROOT/out-yt-dub-default"
 grep -F -- "dub_translate_audio.py --in $TMP_ROOT/out-yt-dub-default/testid.mp3 --target-lang es --outdir $TMP_ROOT/out-yt-dub-default" "$TEST_PYTHON3_LOG" >/dev/null || fail "youtube dub default language not applied"
 [[ -f "$TMP_ROOT/out-yt-dub-default/testid_dub_es.mp3" ]] || fail "youtube dub output missing"
+
+expect_success yt_dub_video_default_lang \
+  "$ROOT_DIR/bin/process_youtube.sh" --url "https://youtube.com/watch?v=test" --dub-video --outdir "$TMP_ROOT/out-yt-dub-video-default"
+grep -F -- "dub_translate_audio.py --in $TMP_ROOT/out-yt-dub-video-default/testid.mp3 --target-lang es --outdir $TMP_ROOT/out-yt-dub-video-default" "$TEST_PYTHON3_LOG" >/dev/null || fail "youtube dub-video default language not applied"
+[[ -f "$TMP_ROOT/out-yt-dub-video-default/testid_dub_es.mp3" ]] || fail "youtube dub-video mp3 output missing"
+[[ -f "$TMP_ROOT/out-yt-dub-video-default/testid_es.mp4" ]] || fail "youtube dub-video mp4 output missing"
 
 echo "All CLI tests passed."

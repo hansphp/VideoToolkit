@@ -17,6 +17,7 @@ Opciones (idénticas):
   --slides [method] [threshold]  Seleccionar 'diapositivas' únicas desde shots (method: phash|ssim|hist; threshold depende del método)
   --audio                      Extraer MP3
   --dub [lang]                Traducir/doblar el audio a otro idioma (default: es) y generar MP3
+  --dub-video [lang]          Generar MP4 final con audio doblado al idioma indicado (default: es)
   --shots [N]                  Capturas cada N segundos (defecto 5)
   --fps [F]                    Capturas por FPS (p.e. 0.5)
   --clip [start] [end] [s]     Clip acelerado: inicio, fin, factor (defecto 2.0)
@@ -28,6 +29,7 @@ Opciones (idénticas):
 Ejemplos:
   process_youtube.sh --url "https://www.youtube.com/watch?v=abc" --all
   process_youtube.sh --url "https://www.youtube.com/watch?v=abc" --audio --shots 3
+  process_youtube.sh --url "https://www.youtube.com/watch?v=abc" --dub-video es
 USAGE
 }
 
@@ -50,6 +52,7 @@ DO_FPS=0; FPS_VAL=0.0
 DO_CLIP=0; CLIP_S=""; CLIP_E=""; CLIP_SPEED="2.0"
 DO_TRANS=0; T_FMT="txt"; T_LANG="auto"; DO_SLIDES=0; SL_METHOD="phash"; SL_THRESH=""
 DO_DUB=0; DUB_LANG="es"
+DO_DUB_VIDEO=0
 DO_ALL=0
 
 while [[ $# -gt 0 ]]; do
@@ -63,6 +66,12 @@ while [[ $# -gt 0 ]]; do
     --audio) DO_AUDIO=1; shift;;
     --dub)
       DO_DUB=1
+      shift
+      if [[ $# -gt 0 && "$1" != -* ]]; then DUB_LANG="$1"; shift; fi
+      ;;
+    --dub-video)
+      DO_DUB=1
+      DO_DUB_VIDEO=1
       shift
       if [[ $# -gt 0 && "$1" != -* ]]; then DUB_LANG="$1"; shift; fi
       ;;
@@ -256,6 +265,15 @@ if (( DO_DUB )); then
     python3 "${ROOT_DIR}/python/dub_translate_audio.py" --in "$MP3_PATH" --target-lang "$DUB_LANG" --outdir "$OUTDIR"
   else
     err "No se encontró MP3 para doblar: $MP3_PATH"
+    exit 1
+  fi
+fi
+if (( DO_DUB_VIDEO )); then
+  DUB_MP3_PATH="$OUTDIR/${VID_ID}_dub_${DUB_LANG}.mp3"
+  if [[ -f "$DUB_MP3_PATH" ]]; then
+    mux_video_audio "$IN" "$DUB_MP3_PATH" "$OUTDIR/${VID_ID}_${DUB_LANG}.mp4"
+  else
+    err "No se encontró audio doblado para crear el video final: $DUB_MP3_PATH"
     exit 1
   fi
 fi

@@ -88,6 +88,7 @@ Una vez completado el proceso, navega al directorio de salida (`out/youtube/yYVQ
 - **Clips acelerados:** genera un video acelerado a 2x, 4x, etc., de todo el archivo o de un segmento (`--clip inicio fin velocidad`).
 - **Transcripción de audio:** convierte el audio a texto en formatos `txt`, `srt`, `vtt` o `json` y soporta varios idiomas (`--transcribe formato idioma`).
 - **Doblaje/traducción a MP3:** crea un MP3 en otro idioma (por defecto español) mediante transcripción + traducción + TTS (`--dub [lang]`).
+- **Video final doblado:** reemplaza el audio original por el doblado y exporta un `.mp4` final (`--dub-video [lang]`).
 
 Todas estas funciones pueden combinarse libremente en los scripts `process_mkv.sh` (para archivos locales `.mkv`) y `process_youtube.sh` (para URLs de YouTube).
 
@@ -163,6 +164,9 @@ bin/process_mkv.sh --in clase.mp4 --shots 1 --slides ssim 0.20 --audio --transcr
 
 # Doblaje/traducción automática a español
 bin/process_mkv.sh --in clase.mkv --dub es
+
+# Video final en español
+bin/process_mkv.sh --in clase.mp4 --dub-video es
 ```
 
 ### Procesar una URL de YouTube
@@ -246,7 +250,7 @@ Para audios largos en CPU se recomienda usar modelos `tiny` o `base` para mayor 
 
 ## Doblaje automático a MP3 traducido
 
-La opción `--dub [lang]` genera un archivo `*_dub_<lang>.mp3` a partir del audio extraído:
+La opción `--dub [lang]` genera un archivo `*_dub_<lang>.mp3` a partir del audio extraído.  Si además quieres el video final con ese audio, usa `--dub-video [lang]`.
 
 1. Transcribe con `faster-whisper`.
 2. Traduce cada segmento al idioma objetivo.
@@ -261,6 +265,9 @@ bin/process_mkv.sh --in clase.mkv --dub es
 
 # Desde YouTube (doblaje al español)
 bin/process_youtube.sh --url "https://www.youtube.com/watch?v=abc" --dub es
+
+# Video final en español desde MP4 local
+bin/process_mkv.sh --in clase.mp4 --dub-video es
 ```
 
 Notas:
@@ -268,6 +275,7 @@ Notas:
 - Si no usas `--audio`, `--dub` extrae un MP3 base automáticamente.
 - `--dub` requiere internet para la traducción/TTS.
 - El doblaje queda alineado por tiempos, pero en segmentos muy largos puede haber solapamientos naturales de voz.
+- `--dub-video` genera un archivo final `<base>_<lang>.mp4` con una sola pista de audio doblada.
 
 ## Casos de uso
 
@@ -298,34 +306,17 @@ Este flujo genera capturas, filtra los `slides` y produce la transcripción, sin
 ### Caso 3: Obtener un video final en español (`.mp4`)
 
 ```bash
-# 1) Generar doblaje al español
 bin/process_youtube.sh \
   --url "https://www.youtube.com/watch?v=yYVQp-IrUeQ" \
-  --dub es
-
-# 2) Combinar video original + doblaje en español
-ffmpeg -y \
-  -i out/youtube/yYVQp-IrUeQ/yYVQp-IrUeQ.mp4 \
-  -i out/youtube/yYVQp-IrUeQ/yYVQp-IrUeQ_dub_es.mp3 \
-  -map 0:v:0 -map 1:a:0 \
-  -c:v copy -c:a aac -shortest \
-  out/youtube/yYVQp-IrUeQ/yYVQp-IrUeQ_es.mp4
+  --dub-video es
 ```
 
-En el segundo paso, `-shortest` asegura que el `.mp4` termine cuando finalice el stream más corto.
-
-Comando continuo (todo en una sola ejecución):
+Para un archivo local el equivalente es:
 
 ```bash
-bin/process_youtube.sh \
-  --url "https://www.youtube.com/watch?v=yYVQp-IrUeQ" \
-  --dub es && \
-ffmpeg -y \
-  -i out/youtube/yYVQp-IrUeQ/yYVQp-IrUeQ.mp4 \
-  -i out/youtube/yYVQp-IrUeQ/yYVQp-IrUeQ_dub_es.mp3 \
-  -map 0:v:0 -map 1:a:0 \
-  -c:v copy -c:a aac -shortest \
-  out/youtube/yYVQp-IrUeQ/yYVQp-IrUeQ_es.mp4
+bin/process_mkv.sh \
+  --in "mi_video.mp4" \
+  --dub-video es
 ```
 
 ## Notas y consejos
