@@ -6,11 +6,13 @@ Supports multiple methods: phash (perceptual hash), ssim, or color histogram.
 Usage:
   python python/select_slides.py --in ./out/<video>/shots --outdir ./out/<video>/slides
                                  [--method phash|ssim|hist] [--threshold T] [--min-gap N]
+                                 [--settle-threshold T]
 
 Defaults:
   --method phash
   --threshold (phash: 12 [Hamming distance 0..64], ssim: 0.15 [keep if 1-SSIM >= 0.15], hist: 0.3 [keep if 1-corr >= 0.3])
   --min-gap 0 (frames)  # ignore first N-1 frames after a keep to avoid bursts
+  --settle-threshold auto for ssim/hist  # require the next frame to be similar before keeping a candidate
 
 Notes on thresholds:
 - phash: lower threshold = more strict (fewer slides kept). Range ~0..64. Typical 8..16.
@@ -123,6 +125,14 @@ def hist_diff(img_path, last_hist, bgr=None):
     diff = 1.0 - float(corr)  # larger diff = more change
     return diff, hist
 
+
+def auto_settle_threshold(method, threshold):
+    if method not in ("ssim", "hist"):
+        return None
+    # A candidate is considered stable when the following frame changes
+    # much less than the main slide-difference threshold.
+    return max(0.01, float(threshold) / 4.0)
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--in", dest="indir", required=True, help="Directory with frames (e.g., shots/*.jpg)")
@@ -130,6 +140,7 @@ def main():
     ap.add_argument("--method", default="phash", choices=["phash","ssim","hist"])
     ap.add_argument("--threshold", type=float, default=-1.0)
     ap.add_argument("--min-gap", dest="min_gap", type=int, default=0, help="Frames to skip after a keep")
+    ap.add_argument("--settle-threshold", type=float, default=-1.0, help="For ssim/hist, max diff allowed to the next frame before treating a candidate as stable (-1 = auto, <0 disabled for other methods)")
     
     ap.add_argument("--min-words", type=int, default=2, help="Minimum OCR-detected words to keep a slide (default: 2). Use 0 to disable.")
     ap.add_argument("--blur-thresh", type=float, default=100.0, help="Variance of Laplacian threshold; below is blurry (default: 100). Use <0 to disable.")
@@ -149,6 +160,9 @@ def main():
         else:                        thr = 0.30
     else:
         thr = args.threshold
+    settle_thr = None if args.settle_threshold < 0 else args.settle_threshold
+    if settle_thr is None:
+        settle_thr = auto_settle_threshold(args.method, thr)
 
     # Gather frames sorted
     frames = sorted([p for p in indir.glob("*.jpg")])
@@ -168,25 +182,35 @@ def main():
         or args.min_words > 0
     )
 
-    for fp in frames:
+    for idx, fp in enumerate(frames):
         if gap > 0:
             gap -= 1
             continue
 
         frame_bgr = _load_bgr(fp) if needs_bgr else None
+        candidate_ref = None
 
         if args.method == "phash":
-            d, new_hash = phash_distance(fp, last_hash, bgr=frame_bgr)
+            d, candidate_ref = phash_distance(fp, last_hash, bgr=frame_bgr)
             keep = (d >= thr) or (last_hash is None)
-            last_hash = new_hash
         elif args.method == "ssim":
-            d, new_img = ssim_diff(fp, last_img, bgr=frame_bgr)
+            d, candidate_ref = ssim_diff(fp, last_img, bgr=frame_bgr)
             keep = (d >= thr) or (last_img is None)
-            last_img = new_img
         else:
-            d, new_hist = hist_diff(fp, last_hist, bgr=frame_bgr)
+            d, candidate_ref = hist_diff(fp, last_hist, bgr=frame_bgr)
             keep = (d >= thr) or (last_hist is None)
-            last_hist = new_hist
+
+        if keep and settle_thr is not None and idx + 1 < len(frames):
+            next_fp = frames[idx + 1]
+            next_bgr = _load_bgr(next_fp)
+            if args.method == "ssim":
+                next_diff, _ = ssim_diff(next_fp, candidate_ref, bgr=next_bgr)
+            elif args.method == "hist":
+                next_diff, _ = hist_diff(next_fp, candidate_ref, bgr=next_bgr)
+            else:
+                next_diff = 0.0
+            if next_diff > settle_thr:
+                keep = False
 
         if keep:
 
@@ -201,6 +225,12 @@ def main():
                 if wc is not None and wc < args.min_words:
                     continue
             shutil.copy2(fp, outdir / fp.name)
+            if args.method == "phash":
+                last_hash = candidate_ref
+            elif args.method == "ssim":
+                last_img = candidate_ref
+            else:
+                last_hist = candidate_ref
             kept += 1
             gap = max(0, args.min_gap)
 

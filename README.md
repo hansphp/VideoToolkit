@@ -203,6 +203,8 @@ python python/select_slides.py \
 
 La opción avanzada `--min-gap N` ignora los siguientes `N‑1` fotogramas tras una imagen seleccionada, evitando ráfagas de diapositivas muy próximas.
 
+Con `ssim` e `hist`, el selector también aplica por defecto una comprobación de estabilidad para evitar capturar un frame intermedio durante una transición.  Si necesitas ajustar ese comportamiento al ejecutar el script Python directamente, puedes usar `--settle-threshold T` (o desactivarlo con un valor alto).
+
 #### OCR y filtro de texto (`min-words`)
 
 El selector también puede descartar imágenes con poco texto (por defecto `--min-words 2`) usando OCR con `pytesseract`.
