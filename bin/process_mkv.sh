@@ -7,7 +7,7 @@ source "${ROOT_DIR}/lib/common.sh"
 usage() {
 cat <<'USAGE'
 Uso:
-  process_mkv.sh --in INPUT.mkv [opciones]
+  process_mkv.sh --in INPUT_VIDEO [opciones]
 
 Opciones (elige una o varias):
   --slides [method] [threshold]  Seleccionar 'diapositivas' únicas desde shots (method: phash|ssim|hist; threshold depende del método)
@@ -23,6 +23,7 @@ Opciones (elige una o varias):
 
 Ejemplos:
   process_mkv.sh --in clase.mkv --audio
+  process_mkv.sh --in clase.mp4 --shots 1 --slides ssim 0.20 --audio --transcribe txt en
   process_mkv.sh --in clase.mkv --shots 3
   process_mkv.sh --in clase.mkv --fps 0.5
   process_mkv.sh --in clase.mkv --clip 00:01:00 00:05:00 2.5

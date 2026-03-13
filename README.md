@@ -135,9 +135,9 @@ Estas pruebas usan herramientas simuladas (stubs) para validar parseo de opcione
 
 ## Uso general de los scripts
 
-### Procesar un archivo MKV
+### Procesar un archivo local (`.mkv` o `.mp4`)
 
-Para procesar una grabación local en `.mkv` utiliza `process_mkv.sh`.  Algunos ejemplos:
+Para procesar una grabación local en `.mkv` o `.mp4` utiliza `process_mkv.sh`.  Algunos ejemplos:
 
 ```bash
 # Ejecutar todo (audio, capturas, clip)
@@ -157,6 +157,9 @@ bin/process_mkv.sh --in clase.mkv --shots 5 --slides phash 12
 
 # Transcripción integrada
 bin/process_mkv.sh --in clase.mkv --audio --transcribe srt es
+
+# Slides + transcripción desde un MP4 local
+bin/process_mkv.sh --in clase.mp4 --shots 1 --slides ssim 0.20 --audio --transcribe txt en
 
 # Doblaje/traducción automática a español
 bin/process_mkv.sh --in clase.mkv --dub es
@@ -277,7 +280,20 @@ bin/process_youtube.sh \
   --transcribe txt en
 ```
 
-### Caso 2: Obtener un video final en español (`.mp4`)
+### Caso 2: MP4 local → slides + transcripción
+
+```bash
+bin/process_mkv.sh \
+  --in "mi_video.mp4" \
+  --shots 1 \
+  --slides ssim 0.20 \
+  --audio \
+  --transcribe txt en
+```
+
+Este flujo genera capturas, filtra los `slides` y produce la transcripción, sin crear clip acelerado ni doblaje.
+
+### Caso 3: Obtener un video final en español (`.mp4`)
 
 ```bash
 # 1) Generar doblaje al español
